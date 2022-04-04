@@ -4,8 +4,8 @@
 
 using namespace audio_tools;
 
-#define MAX_VOLUME 150
-#define DEFAULT_BOOST_VOL 1.0
+#define MAX_VOLUME 32767
+#define DEFAULT_BOOST_VOL 0.1
 
 #define pot1Pin A4
 
@@ -31,6 +31,8 @@ GeneratedSoundStream<sound_t> soundD(squareWaveD);
 
 I2SStream i2s;
 
+VolumeStream volumeE(soundE);
+
 SineWaveGenerator<sound_t> sineWave(MAX_VOLUME);
 AudioEffects<SineWaveGenerator<sound_t>> effects(sineWave);
 GeneratedSoundStream<sound_t> effectSound(effects);
@@ -38,10 +40,10 @@ Boost boost(DEFAULT_BOOST_VOL);
 
 StreamCopy copier(i2s, effectSound);    
 
-StreamCopy copier2(i2s, soundE);
+StreamCopy copier2(i2s, volumeE);
 
-float volFactor = 1.0;
-ConverterScaler<float> volume(volFactor, 0, MAX_VOLUME);
+float volFactor = 0.1;
+//ConverterScaler<float> volume(volFactor, 0, MAX_VOLUME);
 
 const uint16_t E_STRING_FREQS[] =       {82, 87, 92, 98, 104, 110, 117, 123, 131, 139, 147, 156, 165, 175, 185, 196, 208, 220, 233, 247, 262};
 const uint16_t A_STRING_FREQS[] =       {110, 117, 123, 131, 139, 147, 156, 165, 175, 185, 196, 208, 220, 233, 247, 262, 277, 294, 311, 330, 349};
@@ -75,6 +77,9 @@ void setup(void) {
   effectSound.begin(config);
   
   squareWaveE.begin(channels, sample_rate, 100);
+
+  volumeE.begin(config);
+  volumeE.setVolume(0.05);
 }
  
 void loop() {
@@ -90,7 +95,10 @@ void loop() {
 
   
   //if(abs(boost.volume() - volFactor) > 0.02) boost.setVolume(volFactor);
-  if(abs(volume.factor() - volFactor) > 0.05) volume.setFactor(volFactor);
+  //if(abs(volume.factor() - volFactor) > 0.05) volume.setFactor(volFactor);
+  if(abs(volumeE.volume() - volFactor) > 0.001) volumeE.setVolume(volFactor);
+
+  if(volFactor < 0.002) volumeE.setVolume(0);
 
   //Serial.println(noteIndex);
   //squareWave.begin(channels, sample_rate, E_STRING_FREQS[noteIndex]);
@@ -100,7 +108,7 @@ void loop() {
   //squareWaveD.begin(channels, sample_rate, D_STRING_FREQS[noteIndex+2]);
 
   //copier.copy();
-  copier2.copy(volume);
+  copier2.copy();
   //copierA.copy();
   //copierD.copy();
 }
