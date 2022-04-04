@@ -5,29 +5,30 @@
 using namespace audio_tools;
 
 #define MAX_VOLUME 32767
-#define DEFAULT_BOOST_VOL 0.1
+
+#define BOOST_VOLUME 2
+#define FUZZ_EFFECT 5
+#define DIST_CLIP 4990
+#define DIST_MAX_IN 6500
 
 #define pot1Pin A4
+#define btn1Pin 36
 
 uint32_t pot1Value = 0;
+bool btn1On = 0;
+bool fuzzGone = 0;
 
 typedef int16_t sound_t;
 uint16_t sample_rate = 44100;
 uint8_t channels = 2;
 
+unsigned long lastTime = 0;
+
 SquareWaveGenerator<sound_t> squareWaveE(MAX_VOLUME);
-SquareWaveGenerator<sound_t> squareWaveA(MAX_VOLUME);
-SquareWaveGenerator<sound_t> squareWaveD(MAX_VOLUME);
 
 //GeneratorMixer<SineWaveGenerator<int16_t>> mixer();
 
-//GeneratedSoundStream<sound_t> sound(sineWave);
 GeneratedSoundStream<sound_t> soundE(squareWaveE);
-GeneratedSoundStream<sound_t> soundA(squareWaveA);
-GeneratedSoundStream<sound_t> soundD(squareWaveD);
-//StreamCopy copierE(out, soundE);
-//StreamCopy copierA(out, soundA);
-//StreamCopy copierD(out, soundD);
 
 I2SStream i2s;
 
@@ -36,14 +37,21 @@ VolumeStream volumeE(soundE);
 SineWaveGenerator<sound_t> sineWave(MAX_VOLUME);
 AudioEffects<SineWaveGenerator<sound_t>> effects(sineWave);
 GeneratedSoundStream<sound_t> effectSound(effects);
-Boost boost(DEFAULT_BOOST_VOL);      
 
-StreamCopy copier(i2s, effectSound);    
+Boost boost(BOOST_VOLUME);      
+Fuzz fuzz(FUZZ_EFFECT);
+Distortion dist(DIST_CLIP, DIST_MAX_IN);
+//StreamCopy copier(i2s, effectSound);  
 
-StreamCopy copier2(i2s, volumeE);
+GeneratedSoundStream<sound_t> sound(sineWave);
 
-float volFactor = 0.1;
-//ConverterScaler<float> volume(volFactor, 0, MAX_VOLUME);
+//VolumeStream volume2(effectSound);
+VolumeStream volume2(sound);
+LinearVolumeControl lvc;
+
+StreamCopy copier2(i2s, volume2);
+
+double volFactor = 0.1;
 
 const uint16_t E_STRING_FREQS[] =       {82, 87, 92, 98, 104, 110, 117, 123, 131, 139, 147, 156, 165, 175, 185, 196, 208, 220, 233, 247, 262};
 const uint16_t A_STRING_FREQS[] =       {110, 117, 123, 131, 139, 147, 156, 165, 175, 185, 196, 208, 220, 233, 247, 262, 277, 294, 311, 330, 349};
@@ -62,6 +70,7 @@ String tuning = "E-standard";   // "Half step down", "D-standard"
 void setup(void) {
   Serial.begin(115200);
   pinMode(pot1Pin, INPUT);
+  pinMode(btn1Pin, INPUT);
   Serial.println("starting I2S...");
   I2SConfig config = i2s.defaultConfig(TX_MODE);
   config.sample_rate = sample_rate; 
@@ -70,45 +79,47 @@ void setup(void) {
   i2s.begin(config);
 
   sineWave.begin(channels, sample_rate, 500);
-  sineWave.setFrequency(100);
-  boost.setActive(1);
-  boost.setVolume(0.5);
+  sineWave.setFrequency(200);
+  fuzz.setFuzzEffectValue(FUZZ_EFFECT);
+  fuzz.setMaxOut(300);
+  //effects.addEffect(fuzz);
   effects.addEffect(boost);
-  effectSound.begin(config);
-  
-  squareWaveE.begin(channels, sample_rate, 100);
+  effects.addEffect(dist);
 
-  volumeE.begin(config);
-  volumeE.setVolume(0.05);
+  //effectSound.begin(config);
+  //sound.begin(config);
+
+  volume2.begin(config);
+  volume2.setVolume(0.7);
+  volume2.setVolumeControl(lvc);
 }
  
 void loop() {
+  //if(millis() - lastTime > 1){
+  //lastTime = millis();
+  
   pot1Value = analogRead(pot1Pin);
-  //Serial.println(pot1Value);
+  btn1On = digitalRead(btn1Pin);
+  // Serial.println(pot1Value);
   noteIndex = map(pot1Value, 0, 4024, 0, 20);
   volFactor = (double)pot1Value/4050;
-  //Serial.println(volFactor);
+  //volFactor = (double)((millis() % 10000));
+  //volFactor = (double) volFactor / 10000;
+  Serial.println(volFactor);
+  // fuzz.setFuzzEffectValue(2 * noteIndex);
 
-  //Serial.println(boost.volume());
-  //squareWaveE.begin(channels, sample_rate, 100);
+  //Serial.println(btn1On);
 
+  // if(abs(boost.volume() - volFactor) > 0.02) boost.setVolume(volFactor);
+  // if(abs(volume.factor() - volFactor) > 0.05) volume.setFactor(volFactor);
 
-  
-  //if(abs(boost.volume() - volFactor) > 0.02) boost.setVolume(volFactor);
-  //if(abs(volume.factor() - volFactor) > 0.05) volume.setFactor(volFactor);
-  if(abs(volumeE.volume() - volFactor) > 0.001) volumeE.setVolume(volFactor);
+  if (abs(volume2.volume() - volFactor) > 0.05) volume2.setVolume(volFactor);
+  //Serial.println(volume2.volume());
 
-  if(volFactor < 0.002) volumeE.setVolume(0);
+  // if(volFactor < 0.005) volume2.setVolume(0);
 
-  //Serial.println(noteIndex);
-  //squareWave.begin(channels, sample_rate, E_STRING_FREQS[noteIndex]);
-
-  //squareWaveE.begin(channels, sample_rate, E_STRING_FREQS[noteIndex]);
-  //squareWaveA.begin(channels, sample_rate, A_STRING_FREQS[noteIndex+2]);
-  //squareWaveD.begin(channels, sample_rate, D_STRING_FREQS[noteIndex+2]);
-
-  //copier.copy();
+  // copier.copy();
   copier2.copy();
-  //copierA.copy();
-  //copierD.copy();
+  // copierA.copy();
+  // copierD.copy();
 }
