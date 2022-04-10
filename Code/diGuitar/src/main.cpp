@@ -12,9 +12,11 @@ using namespace audio_tools;
 #define DIST_MAX_IN 6500
 
 #define pot1Pin A4
+#define rib1Pin A5
 #define btn1Pin 36
 
 uint32_t pot1Value = 0;
+uint32_t rib1Value = 0;
 bool btn1On = 0;
 bool fuzzGone = 0;
 
@@ -67,10 +69,16 @@ uint8_t noteIndex = 0;
 
 String tuning = "E-standard";   // "Half step down", "D-standard"
 
+void setupGPIO(){
+  pinMode(pot1Pin, INPUT);
+  pinMode(rib1Pin, INPUT);
+  pinMode(btn1Pin, INPUT);
+  
+}
+
 void setup(void) {
   Serial.begin(115200);
-  pinMode(pot1Pin, INPUT);
-  pinMode(btn1Pin, INPUT);
+  setupGPIO();
   Serial.println("starting I2S...");
   I2SConfig config = i2s.defaultConfig(TX_MODE);
   config.sample_rate = sample_rate; 
@@ -83,8 +91,8 @@ void setup(void) {
   fuzz.setFuzzEffectValue(FUZZ_EFFECT);
   fuzz.setMaxOut(300);
   //effects.addEffect(fuzz);
-  effects.addEffect(boost);
-  effects.addEffect(dist);
+  //effects.addEffect(boost);
+  //effects.addEffect(dist);
 
   //effectSound.begin(config);
   //sound.begin(config);
@@ -95,31 +103,27 @@ void setup(void) {
 }
  
 void loop() {
-  //if(millis() - lastTime > 1){
-  //lastTime = millis();
-  
   pot1Value = analogRead(pot1Pin);
-  btn1On = digitalRead(btn1Pin);
+  rib1Value = analogRead(rib1Pin);
+  
+  if(rib1Value > 100 && rib1Value < 5000) {
+    rib1Value = map(rib1Value,300, 4095, 80, 600);
+    sineWave.setFrequency(rib1Value);
+    //Serial.println(rib1Value);
+  }else{
+    rib1Value = 0;
+    //Serial.println(rib1Value);
+    sineWave.setFrequency(80);
+  }
+  
+
+  //btn1On = digitalRead(btn1Pin);
   // Serial.println(pot1Value);
   noteIndex = map(pot1Value, 0, 4024, 0, 20);
   volFactor = (double)pot1Value/4050;
-  //volFactor = (double)((millis() % 10000));
-  //volFactor = (double) volFactor / 10000;
-  Serial.println(volFactor);
-  // fuzz.setFuzzEffectValue(2 * noteIndex);
-
-  //Serial.println(btn1On);
-
-  // if(abs(boost.volume() - volFactor) > 0.02) boost.setVolume(volFactor);
-  // if(abs(volume.factor() - volFactor) > 0.05) volume.setFactor(volFactor);
-
-  if (abs(volume2.volume() - volFactor) > 0.05) volume2.setVolume(volFactor);
-  //Serial.println(volume2.volume());
-
-  // if(volFactor < 0.005) volume2.setVolume(0);
-
-  // copier.copy();
+  
+  if (abs(volume2.volume() - volFactor) > 0.1){
+    volume2.setVolume(volFactor);
+  }
   copier2.copy();
-  // copierA.copy();
-  // copierD.copy();
 }
