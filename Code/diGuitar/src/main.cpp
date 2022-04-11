@@ -11,14 +11,25 @@ using namespace audio_tools;
 #define DIST_CLIP 4990
 #define DIST_MAX_IN 6500
 
+#define NUMBER_OF_VALUE_ARRAYS 6
+
 #define pot1Pin A4
-#define rib1Pin A5
+#define rib0Pin A5
 #define btn1Pin 36
 
-uint32_t pot1Value = 0;
-uint32_t rib1Value = 0;
+uint16_t pot1Value = 0;
+
+constexpr int FILTER_SAMPLES = 3;
+
+uint16_t rib0Value = 0;
+uint16_t rib0Values[FILTER_SAMPLES];
+
+uint16_t* valueArrays[NUMBER_OF_VALUE_ARRAYS];
+
 bool btn1On = 0;
 bool fuzzGone = 0;
+
+float fakeVolume = 0;
 
 typedef int16_t sound_t;
 uint16_t sample_rate = 44100;
@@ -65,20 +76,53 @@ const uint16_t THIN_E_STRING_FREQS[] =  {349, 370, 392, 415, 440, 466, 494, 523,
 const uint16_t ALL_FREQS[] =            {73, 78, 82, 87, 92, 98, 104, 110, 117, 123, 131, 139, 147, 156, 165, 175, 185, 196, 208, 220, 233, 247, 
                                         262, 277, 294, 311, 330, 349, 370, 392, 415, 440, 466, 494, 523, 554, 587, 622, 659, 698, 740, 784, 831, 
                                         880, 932, 933, 1047};
+
+
+
 uint8_t noteIndex = 0;
 
 String tuning = "E-standard";   // "Half step down", "D-standard"
 
 void setupGPIO(){
   pinMode(pot1Pin, INPUT);
-  pinMode(rib1Pin, INPUT);
+  pinMode(rib0Pin, INPUT);
   pinMode(btn1Pin, INPUT);
   
 }
 
+void setupArrays(){
+  valueArrays[0] = rib0Values;
+  for(int i = 0; i < sizeof(valueArrays); i++){ // Every 'values' of 'array'
+    for(int j = 0; j < sizeof(valueArrays[i]); j++){ // Every 'value' of 'values'
+      valueArrays[i][j] = 0; // Set them all to 0
+    }
+  }
+}
+
+template <size_t N>
+
+uint16_t arrayAverage(uint16_t (&array)[N]){
+  uint16_t output = 0;
+  for(uint16_t element : array){
+    output += element;
+  }
+  output /= sizeof(array);
+  return output;
+}
+
+void pushToArray(uint16_t item, uint16_t *target){
+  for(int i = 0; i < sizeof(&target) - 1; i++){
+    target[i+1] = target[i];
+  }
+  target[0] = item;
+}
+
 void setup(void) {
   Serial.begin(115200);
+  
   setupGPIO();
+  setupArrays();
+
   Serial.println("starting I2S...");
   I2SConfig config = i2s.defaultConfig(TX_MODE);
   config.sample_rate = sample_rate; 
@@ -104,23 +148,24 @@ void setup(void) {
  
 void loop() {
   pot1Value = analogRead(pot1Pin);
-  rib1Value = analogRead(rib1Pin);
+  rib0Value = analogRead(rib0Pin);
   
-  if(rib1Value > 100 && rib1Value < 5000) {
-    rib1Value = map(rib1Value,300, 4095, 80, 600);
-    sineWave.setFrequency(rib1Value);
-    //Serial.println(rib1Value);
+  if(rib0Value > 100 && rib0Value < 5000) {
+    pushToArray(rib0Value, rib0Values);
+    rib0Value = arrayAverage(rib0Values);
+    rib0Value = map(rib0Value, 300, 4095, 80, 600);
+    sineWave.setFrequency(rib0Value);
+    //Serial.println(rib0Value);
   }else{
-    rib1Value = 0;
-    //Serial.println(rib1Value);
+    rib0Value = 0;
+    //Serial.println(rib0Value);
     sineWave.setFrequency(80);
   }
-  
 
   //btn1On = digitalRead(btn1Pin);
   // Serial.println(pot1Value);
   noteIndex = map(pot1Value, 0, 4024, 0, 20);
-  volFactor = (double)pot1Value/4050;
+  volFactor = (double)pot1Value / 4050;
   
   if (abs(volume2.volume() - volFactor) > 0.1){
     volume2.setVolume(volFactor);
